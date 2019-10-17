@@ -1,0 +1,5 @@
+#+TITLE: sxhkd-mode
+
+Emacs mode for editing *.sxhkdrc*
+
+Still work in progress.
