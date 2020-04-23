@@ -1,9 +1,9 @@
-;;; sxhkd-mode.el --- A mode for editing sxhkdrc, sxhkd configuration file  -*- lexical-binding: t; -*-
+;;; sxhkd-mode.el --- A mode for editing sxhkdrc -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2019
 
-;; Author:  <>
-;; Keywords:extensions
+;; Author: xFA25E
+;; Keywords: extensions
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,145 +20,109 @@
 
 ;;; Commentary:
 
-;; Not yet ready
+;; A major mode for editing sxhkdrc
+;; Set up like this:
+
+;; (add-to-list 'auto-mode-alist `(,(rx "sxhkdrc" string-end) . sxhkd-mode))
+
+;; This mode also can reload your config after save.
+;; Customize `sxhkd-mode-reload-config' for this
 
 ;;; Code:
 
-;; CONFIGURATION
-;;        Each line of the configuration file is interpreted as so:
+(require 'array)
 
-;;        •   If it is empty or starts with #, it is ignored.
+(defgroup sxhkd-mode nil
+  "Mode for editing sxhkd configuration files."
+  :group 'data)
 
-;;        •   If it starts with a space, it is read as a command.
+(defcustom sxhkd-mode-reload-config 'ask
+  "Should `sxhkd-mode' reload config after save?
+Can be always, ask or never"
+  :type '(radio (symbol :tag always)
+                (symbol :tag ask)
+                (symbol :tag never))
+  :group 'sxhkd-mode)
 
-;;        •   Otherwise, it is read as a hotkey.
+(defvar sxhkd-mode-keywords
+  '("super" "hyper" "meta" "alt" "control" "ctrl" "shift" "mode_switch" "lock"
+    "mod1" "mod2" "mod3" "mod4" "mod5" "any" "button1" "button2" "button3"
+    "button4" "button5" "button6" "button7" "button8" "button9" "button10"
+    "button11" "button12" "button13" "button14" "button15" "button16" "button17"
+    "button18" "button19" "button20" "button21" "button22" "button23"
+    "button24")
+  "Sxhkd keywords.")
 
-;;        General syntax:
+(defvar sxhkd-mode-font-lock-defaults
+  `(;; comments
+    (,(rx bol "#" (*? nonl) eol) . font-lock-comment-face)
 
-;;            HOTKEY
-;;                [;]COMMAND
+    ;; synchronous commands
+    (,(rx bol (+ space) (group ";")) . (1 font-lock-variable-name-face))
 
-;;            HOTKEY      := CHORD_1 ; CHORD_2 ; ... ; CHORD_n
-;;            CHORD_i     := [MODIFIERS_i +] [~][@]KEYSYM_i
-;;            MODIFIERS_i := MODIFIER_i1 + MODIFIER_i2 + ... + MODIFIER_ik
+    ;; end backslash
+    (,(rx bol (not (in "#")) (*? nonl) (group "\\") eol)
+     . (1 font-lock-constant-face))
 
-;;        The valid modifier names are: super, hyper, meta, alt, control, ctrl, shift,
-;;        mode_switch, lock, mod1, mod2, mod3, mod4, mod5 and any.
+    ;; brackets
+    (,(rx (or "{" "}")) . font-lock-type-face)
 
-;;        The keysym names are given by the output of xev.
+    ;; keywords
+    (,(regexp-opt sxhkd-mode-keywords) . font-lock-keyword-face)
 
-;;        Hotkeys and commands can be spread across multiple lines by ending each partial line
-;;        with a backslash character.
+    ;; disallowed comments
+    (,(rx bol (not (in space "#")) (*? nonl) (group "#" (*? nonl)) eol)
+     . (1 font-lock-warning-face)))
+  "`sxhkd-mode' font lock defaults.")
 
-;;        When multiple chords are separated by semicolons, the hotkey is a chord chain: the
-;;        command will only be executed after receiving each chord of the chain in consecutive
-;;        order.
+;; TODO: use emacs built-in way to find sxhkd pid for signal-process
+(defun sxhkd-mode-reload-config ()
+  "Reload sxhkd config."
+  (when (cl-ecase sxhkd-mode-reload-config
+          ((always) t)
+          ((never) nil)
+          ((ask) (yes-or-no-p "Reload config?")))
+    (call-process "pkill" nil 0 nil "-USR1" "--exact" "sxhkd")))
 
-;;        The colon character can be used instead of the semicolon to indicate that the chord
-;;        chain shall not be aborted when the chain tail is reached.
-
-;;        If a command starts with a semicolon, it will be executed synchronously, otherwise
-;;        asynchronously.
-
-;;        The Escape key can be used to abort a chord chain.
-
-;;        If @ is added at the beginning of the keysym, the command will be run on key release
-;;        events, otherwise on key press events.
-
-;;        If ~ is added at the beginning of the keysym, the captured event will be replayed for
-;;        the other clients.
-
-;;        Pointer hotkeys can be defined by using one of the following special keysym names:
-;;        button1, button2, button3, ..., button24.
-
-;;        The hotkey and the command may contain sequences of the form {STRING_1,...,STRING_N}.
-
-;;        In addition, the sequences can contain ranges of the form A-Z where A and Z are
-;;        alphanumeric characters.
-
-;;        The underscore character represents an empty sequence element.
-
-(defvar sxhkd-mode-map
-  (let ((map (make-sparse-keymap)))
-    ;; (define-key map [foo] 'sample-do-foo)
-    map)
-  "Keymap for `sxhkd-mode'.")
-
-(defvar sxhkd-font-lock-keywords
-  `(;; ("function \\(\\sw+\\)" (1 font-lock-function-name-face))
-    (,(regexp-opt '("super" "hyper" "meta" "alt" "control" "ctrl"
-                    "shift" "mode_switch" "lock" "mod1" "mod2" "mod3"
-                    "mod4" "mod5" "any")
-                  'symbols)
-     font-lock-keyword-face))
-  "Keyword highlighting specification for `sxhkd-mode'.")
-
-(defvar sxhkd-mode-syntax-table
-  (let ((st (make-syntax-table)))
-    (modify-syntax-entry ?# "< 1" st)
-    (modify-syntax-entry ?\n "> " st)
-    st)
-  "Syntax table for `sxhkd-mode'.")
-
-(defun sxhkd-indent-line ()
-  "Indent current line as sxhkdrc config."
+(defun sxhkd-mode-completion-at-point ()
+  "This is the function used for the hook `completion-at-point-functions'."
   (interactive)
-  (if (bobp) (indent-line-to 0)))
+  (let* ((bounds (bounds-of-thing-at-point 'symbol))
+         (start (car bounds))
+         (end (cdr bounds)))
+    (list start end sxhkd-mode-keywords)))
 
-;; (defun apply-sxhkd-mode-syntax-table (beg end)
-;;   (save-excursion
-;;     (save-restriction
-;;       (widen)
-;;       (goto-char beg)
-;;       ;; for every line between points BEG and END
-;;       (while (and (not (eobp)) (< (point) end))
-;;         (beginning-of-line)
-;;         (when (looking-at "^#")
-;;           ;; remove current syntax-table property
-;;           (remove-text-properties (1- (line-beginning-position))
-;;                                   (1+ (line-end-position))
-;;                                   '(syntax-table))
-;;           ;; set syntax-table property to our custom one
-;;           ;; for the whole line including the beginning and ending newlines
-;;           (add-text-properties (1- (line-beginning-position))
-;;                                (1+ (line-end-position))
-;;                                (list 'syntax-table sxhkd-mode-syntax-table)))
-;;         (forward-line 1)))))
+(defun sxhkd-mode-indent-line ()
+  "Indentation function for `sxhkd-mode'."
+  (indent-line-to (sxhkd-mode-indentation-length)))
 
-(defun sxhkd-comment-dwim ()
-  "Disable creating comments after non comment line.
-Create region containing current line if there is no active region."
-  (interactive)
+(defun sxhkd-mode-indentation-length ()
+  "Determine indentation length of current line."
   (save-excursion
-    (unless (use-region-p)
-      (end-of-line)
-      (push-mark (line-beginning-position))
-      (setq mark-active t))
-    (comment-dwim nil)))
-
-(defun sxhkd-reload ()
-  "Reload sxhkd."
-  ;TODO: maybe use proced functions to send signols
-  (shell-command "pkill -USR1 --exact sxhkd"))
+    (if (zerop (current-line))
+        0
+      ;; go up, until end of comment or beginning of buffer
+      (beginning-of-line 0)
+      (while (and (looking-at-p (rx "#")) (not (bobp)))
+        (beginning-of-line 0))
+      ;; previous line is comment or empty line
+      (if (looking-at-p (rx (or "#" (and bol eol))))
+          0
+        (end-of-line)
+        (forward-char -1)
+        (if (looking-at-p (rx "\\")) 0 1)))))
 
 ;;;###autoload
 (define-derived-mode sxhkd-mode fundamental-mode "Sxhkd"
   "A major mode for editing sxhkdrc."
-  :syntax-table sxhkd-mode-syntax-table
-  ;; :syntax-table (make-syntax-table)
-  (setq-local comment-start "#")
+  (setq-local font-lock-defaults '(sxhkd-mode-font-lock-defaults))
+  (setq-local comment-start "# ")
   (setq-local comment-end "")
-  (setq-local comment-column 0)
-  (setq-local comment-style 'multi-line)
-  ;; (setq syntax-propertize-function 'apply-sxhkd-mode-syntax-table)
-  (setq-local font-lock-defaults
-              '(sxhkd-font-lock-keywords))
-  (setq-local indent-line-function #'sxhkd-indent-line)
-  (local-set-key [remap comment-dwim] #'sxhkd-comment-dwim)
-  (add-hook 'after-save-hook #'sxhkd-reload nil t))
+  (setq-local indent-line-function #'sxhkd-mode-indent-line)
+  (add-hook 'after-save-hook #'sxhkd-mode-reload-config nil t)
+  (add-hook 'completion-at-point-functions
+            #'sxhkd-mode-completion-at-point nil t))
 
 (provide 'sxhkd-mode)
-
-;; see ledger-mode for inspiration
 
 ;;; sxhkd-mode.el ends here

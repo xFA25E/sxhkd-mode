@@ -1,5 +1,13 @@
 #+TITLE: sxhkd-mode
 
-Emacs mode for editing *.sxhkdrc*
+A major mode for editing sxhkdrc
 
-Still work in progress.
+Set up like this:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'auto-mode-alist `(,(rx "sxhkdrc" string-end) . sxhkd-mode))
+#+END_SRC
+
+This mode also can reload your config after save.
+
+Customize ~sxhkd-mode-reload-config~
