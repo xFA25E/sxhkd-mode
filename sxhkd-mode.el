@@ -38,10 +38,10 @@
 
 (defcustom sxhkd-mode-reload-config 'ask
   "Should `sxhkd-mode' reload config after save?
-Can be always, ask or never"
-  :type '(radio (symbol :tag always)
-                (symbol :tag ask)
-                (symbol :tag never))
+Can be t, nil or ask"
+  :type '(radio (const :tag "Always" t)
+                (const :tag "Never" nil)
+                (const :tag "Ask" ask))
   :group 'sxhkd-mode)
 
 (defvar sxhkd-mode-keywords
@@ -78,10 +78,9 @@ Can be always, ask or never"
 ;; TODO: use emacs built-in way to find sxhkd pid for signal-process
 (defun sxhkd-mode-reload-config ()
   "Reload sxhkd config."
-  (when (cl-ecase sxhkd-mode-reload-config
-          ((always) t)
-          ((never) nil)
-          ((ask) (yes-or-no-p "Reload config?")))
+  (when (if (eq sxhkd-mode-reload-config 'ask)
+            (yes-or-no-p "Reload config?")
+          sxhkd-mode-reload-config)
     (call-process "pkill" nil 0 nil "-USR1" "--exact" "sxhkd")))
 
 (defun sxhkd-mode-completion-at-point ()
