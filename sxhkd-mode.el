@@ -44,8 +44,10 @@ Can be t, nil or ask"
                 (const :tag "Ask" ask))
   :group 'sxhkd-mode)
 
-(defvar sxhkd-mode-indentation-length 2
-  "Indentation length")
+(defcustom sxhkd-mode-indentation-length 2
+  "Indentation length."
+  :type 'integer
+  :group 'sxhkd-mode)
 
 (defvar sxhkd-mode-keywords
   '("super" "hyper" "meta" "alt" "control" "ctrl" "shift" "mode_switch" "lock"
@@ -111,7 +113,7 @@ Can be t, nil or ask"
       (if (looking-at-p (rx (or "#" (and bol eol))))
           0
         (end-of-line)
-        (forward-char (* -1 sxhkd-mode-indentation-length))
+        (forward-char (- sxhkd-mode-indentation-length))
         (if (looking-at-p (rx "\\")) 0 sxhkd-mode-indentation-length)))))
 
 ;;;###autoload
