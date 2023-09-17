@@ -44,6 +44,11 @@ Can be t, nil or ask"
                 (const :tag "Ask" ask))
   :group 'sxhkd-mode)
 
+(defcustom sxhkd-mode-indentation-length 2
+  "Indentation length."
+  :type 'integer
+  :group 'sxhkd-mode)
+
 (defvar sxhkd-mode-keywords
   '("super" "hyper" "meta" "alt" "control" "ctrl" "shift" "mode_switch" "lock"
     "mod1" "mod2" "mod3" "mod4" "mod5" "any" "button1" "button2" "button3"
@@ -93,9 +98,9 @@ Can be t, nil or ask"
 
 (defun sxhkd-mode-indent-line ()
   "Indentation function for `sxhkd-mode'."
-  (indent-line-to (sxhkd-mode-indentation-length)))
+  (indent-line-to (sxhkd-mode-current-indentation-length)))
 
-(defun sxhkd-mode-indentation-length ()
+(defun sxhkd-mode-current-indentation-length ()
   "Determine indentation length of current line."
   (save-excursion
     (if (zerop (current-line))
@@ -108,8 +113,8 @@ Can be t, nil or ask"
       (if (looking-at-p (rx (or "#" (and bol eol))))
           0
         (end-of-line)
-        (forward-char -1)
-        (if (looking-at-p (rx "\\")) 0 1)))))
+        (forward-char (- sxhkd-mode-indentation-length))
+        (if (looking-at-p (rx "\\")) 0 sxhkd-mode-indentation-length)))))
 
 ;;;###autoload
 (define-derived-mode sxhkd-mode fundamental-mode "Sxhkd"
